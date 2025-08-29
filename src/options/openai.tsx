@@ -32,11 +32,30 @@ export const OpenAISetting = () => {
     setSetting('openai', { ...openai, customModel: target.value })
   }
 
+  const onMarkdownRenderChange = (e: Event) => {
+    const target = e.target as HTMLInputElement
+    const openai = settings().openai
+    setSetting('openai', { ...openai, useMarkdownRender: target.checked })
+  }
+
   return (
     <Show when={settings().dictTabs.openai}>
       <section class="section">
         <h2 class="h2">OpenAI</h2>
         <div class="flex flex-col items-end gap-4 mt-4 mb-1">
+          <div class="flex justify-end">
+            <label for="useMarkdownRender" class="label gap-4 cursor-pointer">
+              <span class="text-xs">use Markdown render</span>
+              <input
+                class="toggle dark:toggle-info toggle-sm"
+                type="checkbox"
+                name="useMarkdownRender"
+                id="useMarkdownRender"
+                checked={settings().openai.useMarkdownRender}
+                oninput={onMarkdownRenderChange}
+              />
+            </label>
+          </div>
           <div>
             <select
               class="select select-bordered select-sm w-full max-w-xs text-xs"

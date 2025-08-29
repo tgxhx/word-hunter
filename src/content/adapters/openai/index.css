@@ -11,3 +11,112 @@
     color: var(--color-main);
   }
 }
+
+/* Markdown rendering styles */
+.__dict_container .markdown-content {
+  white-space: normal;
+}
+
+.__dict_container .markdown-content h1,
+.__dict_container .markdown-content h2,
+.__dict_container .markdown-content h3,
+.__dict_container .markdown-content h4,
+.__dict_container .markdown-content h5,
+.__dict_container .markdown-content h6 {
+  color: var(--color-main);
+  margin: 1em 0 0.5em 0;
+  font-weight: bold;
+  line-height: 1.2;
+}
+
+.__dict_container .markdown-content h1 {
+  font-size: 1.8em;
+  border-bottom: 2px solid var(--color-main);
+  padding-bottom: 0.3em;
+}
+.__dict_container .markdown-content h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--color-main);
+  padding-bottom: 0.2em;
+}
+.__dict_container .markdown-content h3 {
+  font-size: 1.3em;
+}
+
+.__dict_container .markdown-content p {
+  margin: 0.8em 0;
+  line-height: 1.6;
+}
+
+.__dict_container .markdown-content strong,
+.__dict_container .markdown-content b {
+  color: var(--color-main);
+  font-weight: bold;
+}
+
+.__dict_container .markdown-content em,
+.__dict_container .markdown-content i {
+  font-style: italic;
+  color: #666;
+}
+
+.__dict_container .markdown-content ul,
+.__dict_container .markdown-content ol {
+  margin: 1em 0;
+  padding-left: 2em;
+}
+
+.__dict_container .markdown-content li {
+  margin: 0.5em 0;
+  line-height: 1.5;
+}
+
+.__dict_container .markdown-content ul li {
+  list-style-type: disc;
+}
+
+.__dict_container .markdown-content ol li {
+  list-style-type: decimal;
+}
+
+.__dict_container .markdown-content code {
+  background-color: rgba(128, 128, 128, 0.15);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #d63384;
+}
+
+.__dict_container .markdown-content pre {
+  background-color: rgba(128, 128, 128, 0.1);
+  padding: 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 1em 0;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.__dict_container .markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.__dict_container .markdown-content blockquote {
+  border-left: 4px solid var(--color-main);
+  padding-left: 1.5em;
+  margin: 1em 0;
+  opacity: 0.8;
+  font-style: italic;
+  background-color: rgba(128, 128, 128, 0.05);
+  padding: 1em 1.5em;
+  border-radius: 0 6px 6px 0;
+}
+
+.__dict_container .markdown-content hr {
+  border: none;
+  border-top: 2px solid var(--color-main);
+  margin: 2em 0;
+  opacity: 0.3;
+}

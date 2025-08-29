@@ -1,13 +1,57 @@
 import { safeEmphasizeWordInText } from './index'
 import { DEFAULT_SETTINGS, settings } from './settings'
+import * as marked from 'marked'
+
+// Convert JSON response to Markdown format
+function convertJsonToMarkdown(jsonData: any): string {
+  try {
+    const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData
+    let markdown = ''
+
+    // Common meanings section
+    if (data.sections.common_meanings) {
+      const title = data.sections.common_meanings.title_template
+      markdown += `### 1. ${title}\n\n`
+      data.sections.common_meanings.items.forEach((item: any) => {
+        markdown += `- ${item.definition}\n`
+      })
+      markdown += '\n'
+    }
+
+    // Context analysis section
+    if (data.sections.context_analysis) {
+      markdown += `### 2. ${data.sections.context_analysis.title}\n\n`
+      markdown += `**句子：** "${data.sections.context_analysis.sentence}"\n\n`
+      markdown += `${data.sections.context_analysis.analysis}\n\n`
+    }
+
+    // Similar words section
+    if (data.sections.similar_words) {
+      markdown += `### 3. ${data.sections.similar_words.title}\n\n`
+      data.sections.similar_words.items.forEach((item: any) => {
+        markdown += `- **${item.english}** - ${item.chinese}\n`
+      })
+    }
+
+    return markdown
+  } catch (error) {
+    console.error('[JSON to Markdown] Parse error:', error)
+    return jsonData // Return original text if parsing fails
+  }
+}
 
 function getHeaders() {
   const apiKey = settings().openai.apiKey
   return new Headers({ Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' })
 }
 
+
+
 export async function explainWord(word: string, context: string, model: string) {
-  const headers = await getHeaders()
+  const headers = getHeaders()
+  const useMarkdownRender = settings().openai.useMarkdownRender
+
+  // Always use user's custom prompt with variable replacement
   const promptTemplate = settings().openai.prompt ?? DEFAULT_SETTINGS.openai.prompt
   const prompt = promptTemplate.replace('${word}', word).replace('${context}', context)
 
@@ -40,7 +84,29 @@ export async function explainWord(word: string, context: string, model: string) 
       throw json.error
     }
     const text = json.choices[0].message.content ?? ''
-    return safeEmphasizeWordInText(text.replace('\n\n', '\n').replaceAll('. ', '. \n\n'), word)
+    const processedText = text.replace('\n\n', '\n').replaceAll('. ', '. \n\n')
+
+    if (useMarkdownRender) {
+      console.log('[Markdown Debug] Original JSON response:', text)
+
+      // Convert JSON to Markdown
+      const markdownText = convertJsonToMarkdown(text)
+      console.log('[Markdown Debug] Converted Markdown:', markdownText)
+
+      // Parse Markdown to HTML
+      const markdownHtml = await marked.parse(markdownText)
+      console.log('[Markdown Debug] Rendered HTML:', markdownHtml)
+
+      // For Markdown rendering, we need to emphasize the word without escaping HTML
+      const regex = new RegExp('(<.*>)?(' + word + ')(</.*>)?', 'gi')
+      const emphasizedHtml = markdownHtml.replace(regex, `$1<b>$2</b>$3`)
+      // Wrap in a div with markdown-content class for styling
+      const wrappedHtml = `<div class="markdown-content">${emphasizedHtml}</div>`
+      console.log('[Markdown Debug] Final HTML:', wrappedHtml)
+      return wrappedHtml
+    }
+
+    return safeEmphasizeWordInText(processedText, word)
   } catch (e: any) {
     return e.message
   }

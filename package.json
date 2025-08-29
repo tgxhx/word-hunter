@@ -39,6 +39,7 @@
     "@thisbeyond/solid-dnd": "^0.7.5",
     "@webcomponents/custom-elements": "^1.6.0",
     "component-register": "0.8.3",
+    "marked": "^16.2.0",
     "solid-element": "^1.8.0",
     "solid-js": "^1.8.16",
     "tailwindcss": "^3.4.3",
