@@ -1,44 +1,7 @@
 import { safeEmphasizeWordInText } from './index'
 import { DEFAULT_SETTINGS, settings } from './settings'
 import * as marked from 'marked'
-
-// Convert JSON response to Markdown format
-function convertJsonToMarkdown(jsonData: any): string {
-  try {
-    const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData
-    let markdown = ''
-
-    // Common meanings section
-    if (data.sections.common_meanings) {
-      const title = data.sections.common_meanings.title_template
-      markdown += `### 1. ${title}\n\n`
-      data.sections.common_meanings.items.forEach((item: any) => {
-        markdown += `- ${item.definition}\n`
-      })
-      markdown += '\n'
-    }
-
-    // Context analysis section
-    if (data.sections.context_analysis) {
-      markdown += `### 2. ${data.sections.context_analysis.title}\n\n`
-      markdown += `**句子：** "${data.sections.context_analysis.sentence}"\n\n`
-      markdown += `${data.sections.context_analysis.analysis}\n\n`
-    }
-
-    // Similar words section
-    if (data.sections.similar_words) {
-      markdown += `### 3. ${data.sections.similar_words.title}\n\n`
-      data.sections.similar_words.items.forEach((item: any) => {
-        markdown += `- **${item.english}** - ${item.chinese}\n`
-      })
-    }
-
-    return markdown
-  } catch (error) {
-    console.error('[JSON to Markdown] Parse error:', error)
-    return jsonData // Return original text if parsing fails
-  }
-}
+import { parseWordResponse, convertToMarkdown } from './jsonParser'
 
 function getHeaders() {
   const apiKey = settings().openai.apiKey
@@ -87,10 +50,14 @@ export async function explainWord(word: string, context: string, model: string) 
     const processedText = text.replace('\n\n', '\n').replaceAll('. ', '. \n\n')
 
     if (useMarkdownRender) {
-      console.log('[Markdown Debug] Original JSON response:', text)
+      console.log('[Markdown Debug] Original AI response:', text)
 
-      // Convert JSON to Markdown
-      const markdownText = convertJsonToMarkdown(text)
+      // Parse response using enhanced parser
+      const parseResult = parseWordResponse(text, word)
+      console.log('[Markdown Debug] Parse result:', parseResult)
+
+      // Convert to Markdown
+      const markdownText = convertToMarkdown(parseResult, word)
       console.log('[Markdown Debug] Converted Markdown:', markdownText)
 
       // Parse Markdown to HTML
