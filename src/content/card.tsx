@@ -211,7 +211,7 @@ export const WhCard = customElement('wh-card', () => {
         if (e.key === 'Escape') {
           hidePopupDelay(0)
         }
-        if (e.key === 'a') {
+        if (e.key === 'a' || e.key === 'q') {
           onKnown(e)
         }
         if (e.key === 's') {
