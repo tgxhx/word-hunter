@@ -48,9 +48,7 @@ export const DEFAULT_SETTINGS = {
     prompt: 'explain the word ${word} in the sentence "${context}" with grade 2 English words',
     customModel: '',
     useMarkdownRender: false
-  },
-  githubToken: '',
-  githubGistId: ''
+  }
 }
 
 export type SettingType = typeof DEFAULT_SETTINGS
@@ -179,3 +177,29 @@ export function initSettings() {
 }
 
 initSettings()
+
+export async function getGithubToken(): Promise<string> {
+  const result = await chrome.storage.sync.get(StorageKey.github_token)
+  return result[StorageKey.github_token] || ''
+}
+
+export async function setGithubToken(token: string): Promise<void> {
+  if (token) {
+    await chrome.storage.sync.set({ [StorageKey.github_token]: token })
+  } else {
+    await chrome.storage.sync.remove(StorageKey.github_token)
+  }
+}
+
+export async function getGithubGistId(): Promise<string> {
+  const result = await chrome.storage.sync.get(StorageKey.github_gist_id)
+  return result[StorageKey.github_gist_id] || ''
+}
+
+export async function setGithubGistId(gistId: string): Promise<void> {
+  if (gistId) {
+    await chrome.storage.sync.set({ [StorageKey.github_gist_id]: gistId })
+  } else {
+    await chrome.storage.sync.remove(StorageKey.github_gist_id)
+  }
+}
