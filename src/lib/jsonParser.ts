@@ -9,7 +9,7 @@ export interface ParsedWordData {
   sections?: {
     common_meanings?: {
       title_template?: string
-      items?: Array<{ definition: string }>
+      items?: Array<{ definition: string } | string>
     }
     context_analysis?: {
       title: string
@@ -149,8 +149,8 @@ function smartQuoteRepair(text: string): string {
 
       // 如果值已经是正确格式的字符串
       if (valueChar === '"' || valueChar === '{' || valueChar === '[' ||
-          valueChar === 't' || valueChar === 'f' || valueChar === 'n' ||
-          valueChar.match(/\d/)) {
+        valueChar === 't' || valueChar === 'f' || valueChar === 'n' ||
+        valueChar.match(/\d/)) {
 
         // 检查是否是未闭合的字符串
         if (valueChar === '"') {
@@ -193,7 +193,7 @@ function smartQuoteRepair(text: string): string {
             else if (currentChar === '[') bracketCount++
             else if (currentChar === ']') bracketCount--
             else if ((currentChar === ',' || currentChar === '}' || currentChar === ']') &&
-                     braceCount === 0 && bracketCount === 0) {
+              braceCount === 0 && bracketCount === 0) {
               break
             }
           }
@@ -223,7 +223,7 @@ function smartQuoteRepair(text: string): string {
             else if (currentChar === '[') bracketCount++
             else if (currentChar === ']') bracketCount--
             else if ((currentChar === ',' || currentChar === '}' || currentChar === ']') &&
-                     braceCount === 0 && bracketCount === 0) {
+              braceCount === 0 && bracketCount === 0) {
               break
             }
           }
@@ -396,7 +396,8 @@ function dataToMarkdown(data: ParsedWordData, word: string): string {
       const title = data.sections.common_meanings.title_template?.replace('#word_placeholder#', word) || `单词"${word}"的常见含义`
       markdown += `### 1. ${title}\n\n`
       data.sections.common_meanings.items.forEach(item => {
-        markdown += `- ${item.definition}\n`
+        const definition = typeof item === 'string' ? item : item.definition
+        markdown += `- ${definition}\n`
       })
       markdown += '\n'
     }
