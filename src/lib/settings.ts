@@ -48,8 +48,16 @@ export const DEFAULT_SETTINGS = {
     prompt: 'explain the word ${word} in the sentence "${context}" with grade 2 English words',
     customModel: '',
     useMarkdownRender: false
-  }
+  },
+  webdav: {
+    url: '',
+    username: '',
+    password: ''
+  },
+  syncType: 'google_drive' as SyncType
 }
+
+export type SyncType = 'google_drive' | 'github_gist' | 'webdav'
 
 export type SettingType = typeof DEFAULT_SETTINGS
 
@@ -82,7 +90,7 @@ export async function syncSettings(updateTime?: number) {
   }
 }
 
-export async function resotreSettings(values: SettingType) {
+export async function restoreSettings(values: SettingType) {
   values = values ?? DEFAULT_SETTINGS
   setSettings(values)
   await syncSettings()
@@ -100,7 +108,9 @@ export async function mergeSetting(
     gdriveSettingTime > syncedSettingTime ? [syncedSettings, gdriveSettings] : [gdriveSettings, syncedSettings]
 
   settingsList.forEach(_settings => {
-    Object.assign(mergedSettings, fillUpNewDefaultSettingFiled(_settings, DEFAULT_SETTINGS))
+    let source = fillUpNewDefaultSettingFiled({ ..._settings }, DEFAULT_SETTINGS) as SettingType
+    source = sanitizeSettings(source)
+    Object.assign(mergedSettings, source)
   })
   setSettings(mergedSettings)
   await syncSettings(updateTime)
@@ -131,6 +141,20 @@ function fillUpNewDefaultSettingFiled(target: Record<string, any>, source: Recor
     }
   }
   return target
+}
+
+export function sanitizeSettings(settings: SettingType) {
+  const newSettings = { ...settings }
+  // 清除敏感凭证，避免同步到云端
+  // githubToken/githubGistId 已独立存储在 chrome.storage.sync，始终删除
+  delete (newSettings as any).githubToken
+  delete (newSettings as any).githubGistId
+
+  // 如果不是 webdav 同步方式，清空 webdav 凭证但保留结构
+  if (settings.syncType !== 'webdav') {
+    newSettings.webdav = { url: '', username: '', password: '' }
+  }
+  return newSettings
 }
 
 export async function getSelectedDicts(dict: WordInfoMap) {

@@ -1,6 +1,6 @@
 import { createSignal, Show } from 'solid-js'
 import { StorageKey } from '../constant'
-import { downloadAsJsonFile, resotreSettings, settings, setSetting } from '../lib'
+import { downloadAsJsonFile, restoreSettings, settings, setSetting } from '../lib'
 import {
   getGithubToken as getGithubTokenFromStorage,
   setGithubToken as setGithubTokenToStorage,
@@ -9,22 +9,27 @@ import {
 } from '../lib/settings'
 import { syncUpKnowns, getLocalValue } from '../lib/storage'
 import { Note } from './note'
-import { syncWithDrive, getBackupData, syncWithGist } from '../lib/backup/sync'
+import { syncWithDrive, getBackupData, syncWithGist, syncWithWebDAV, restoreBackupData } from '../lib/backup/sync'
 import { formatTime } from '../lib/utils'
 import { isMobile, isValidAuthToken } from '../lib/backup/drive'
+
+import { SyncType } from '../lib/settings'
 
 export const Backup = () => {
   const [toastSuccess, setToastSuccess] = createSignal('')
   const [toastError, setToastError] = createSignal('')
-  const [syning, setSyning] = createSignal(false)
+  const [syncing, setSyncing] = createSignal(false)
   const [latestSyncTime, setLatestSyncTime] = createSignal(0)
   const [syncFailedMessage, setSyncFailedMessage] = createSignal('')
   const [gdriveToken, setGdriveToken] = createSignal('')
-  const [githubSyning, setGithubSyning] = createSignal(false)
+  const [githubSyncing, setGithubSyncing] = createSignal(false)
   const [latestGistSyncTime, setLatestGistSyncTime] = createSignal(0)
   const [gistSyncFailedMessage, setGistSyncFailedMessage] = createSignal('')
   const [githubToken, setGithubToken] = createSignal('')
   const [githubGistId, setGithubGistId] = createSignal('')
+  const [webdavSyncing, setWebdavSyncing] = createSignal(false)
+  const [latestWebDAVSyncTime, setLatestWebDAVSyncTime] = createSignal(0)
+  const [webdavSyncFailedMessage, setWebdavSyncFailedMessage] = createSignal('')
 
   const onGDriveTokenInput = (e: Event) => {
     const target = e.target as HTMLTextAreaElement
@@ -54,6 +59,26 @@ export const Backup = () => {
     setGithubGistIdToStorage(value)
   }
 
+  const onWebDAVUrlInput = (e: Event) => {
+    const target = e.target as HTMLInputElement
+    setSetting('webdav', { ...settings().webdav, url: target.value })
+  }
+
+  const onWebDAVUsernameInput = (e: Event) => {
+    const target = e.target as HTMLInputElement
+    setSetting('webdav', { ...settings().webdav, username: target.value })
+  }
+
+  const onWebDAVPasswordInput = (e: Event) => {
+    const target = e.target as HTMLInputElement
+    setSetting('webdav', { ...settings().webdav, password: target.value })
+  }
+
+  const onSyncTypeChange = (e: Event) => {
+    const target = e.target as HTMLSelectElement
+    setSetting('syncType', target.value as SyncType)
+  }
+
   getLocalValue(StorageKey.latest_sync_time).then(time => {
     if (time) {
       setLatestSyncTime(time)
@@ -81,6 +106,18 @@ export const Backup = () => {
   getLocalValue(StorageKey.gist_sync_failed_message).then(message => {
     if (message) {
       setGistSyncFailedMessage(message)
+    }
+  })
+
+  getLocalValue(StorageKey.latest_webdav_sync_time).then(time => {
+    if (time) {
+      setLatestWebDAVSyncTime(time)
+    }
+  })
+
+  getLocalValue(StorageKey.webdav_sync_failed_message).then(message => {
+    if (message) {
+      setWebdavSyncFailedMessage(message)
     }
   })
 
@@ -148,13 +185,8 @@ export const Backup = () => {
       toastE('invalid file️')
       return
     }
-    const updateTime = Date.now()
-    await chrome.storage.local.set({
-      [StorageKey.context]: json[StorageKey.context] ?? {},
-      [StorageKey.context_update_timestamp]: updateTime
-    })
-    syncUpKnowns(Object.keys(json[StorageKey.known] ?? {}), json[StorageKey.known], updateTime)
-    await resotreSettings(json[StorageKey.settings])
+    await restoreBackupData(json)
+    toastS('restore success')
   }
 
   const onBackup = async () => {
@@ -165,30 +197,30 @@ export const Backup = () => {
   }
 
   const onDriveSync = async () => {
-    if (syning()) return
-    setSyning(true)
+    if (syncing()) return
+    setSyncing(true)
     try {
       const latestSyncTime = await syncWithDrive(true)
       setLatestSyncTime(latestSyncTime)
       setSyncFailedMessage('')
-      setSyning(false)
+      setSyncing(false)
       toastS('sync success')
     } catch (e: any) {
-      setSyning(false)
+      setSyncing(false)
       setSyncFailedMessage(e.message)
       toastE('sync failed: ️' + e.message)
     }
   }
 
   const onGithubGistSync = async () => {
-    if (githubSyning()) return
+    if (githubSyncing()) return
     const token = githubToken()
     const gistId = githubGistId()
     if (!token || !gistId) {
       toastE('invalid token or gist id')
       return
     }
-    setGithubSyning(true)
+    setGithubSyncing(true)
     try {
       const latestSyncTime = await syncWithGist(token, gistId)
       setLatestGistSyncTime(latestSyncTime)
@@ -198,7 +230,28 @@ export const Backup = () => {
       setGistSyncFailedMessage(e.message)
       toastE('Error during sync settings: ' + e.message)
     } finally {
-      setGithubSyning(false)
+      setGithubSyncing(false)
+    }
+  }
+
+  const onWebDAVSync = async () => {
+    if (webdavSyncing()) return
+    const { url } = settings().webdav
+    if (!url) {
+      toastE('invalid webdav url')
+      return
+    }
+    setWebdavSyncing(true)
+    try {
+      const latestSyncTime = await syncWithWebDAV()
+      setLatestWebDAVSyncTime(latestSyncTime)
+      setWebdavSyncFailedMessage('')
+      toastS('sync success')
+    } catch (e: any) {
+      setWebdavSyncFailedMessage(e.message)
+      toastE('Error during sync settings: ' + e.message)
+    } finally {
+      setWebdavSyncing(false)
     }
   }
 
@@ -219,69 +272,137 @@ export const Backup = () => {
           </button>
         </div>
 
-        <div class="divider">OR</div>
+        <div class="divider">Sync Method</div>
 
-        <div class="grid gap-4 mt-1 mb-2">
-          <Show when={isMobile}>
-            <textarea
-              placeholder="Only for Mobile browser:\n Run `await chrome.identity.getAuthToken()` in Desktop Chrome console in option page to get the token, then paste it here."
-              class="textarea textarea-bordered textarea-lg w-full h-24 text-sm leading-5"
-              classList={{ 'textarea-error': !!gdriveToken() && !isValidAuthToken(gdriveToken()) }}
-              value={gdriveToken()}
-              oninput={onGDriveTokenInput}
+        <select
+          class="select select-bordered w-full mb-4"
+          style={{
+            'margin-left': 'var(--px-block)',
+            'margin-right': 'var(--px-block)',
+            width: 'calc(100% - 2 * var(--px-block))'
+          }}
+          onchange={onSyncTypeChange}
+        >
+          <option value="google_drive" selected={settings().syncType === 'google_drive'}>
+            Google Drive
+          </option>
+          <option value="github_gist" selected={settings().syncType === 'github_gist'}>
+            Github Gist
+          </option>
+          <option value="webdav" selected={settings().syncType === 'webdav'}>
+            WebDAV
+          </option>
+        </select>
+
+        <Show when={settings().syncType === 'google_drive'}>
+          <div class="grid gap-4 mt-1 mb-2">
+            <Show when={isMobile}>
+              <textarea
+                placeholder="Only for Mobile browser:\n Run `await chrome.identity.getAuthToken()` in Desktop Chrome console in option page to get the token, then paste it here."
+                class="textarea textarea-bordered textarea-lg w-full h-24 text-sm leading-5"
+                classList={{ 'textarea-error': !!gdriveToken() && !isValidAuthToken(gdriveToken()) }}
+                value={gdriveToken()}
+                oninput={onGDriveTokenInput}
+              />
+            </Show>
+            <button onclick={onDriveSync} class="btn btn-block btn-lg capitalize text-xs">
+              <img
+                src={chrome.runtime.getURL('icons/gdrive.png')}
+                classList={{ 'animate-spin': syncing() }}
+                class="w-8 h-8"
+                alt="upload"
+              />
+              Google Drive Sync
+            </button>
+
+            <Show when={latestSyncTime() > 0 && !syncFailedMessage()}>
+              <div class="text-center text-accent">Latest sync: {formatTime(latestSyncTime())}</div>
+            </Show>
+            <Show when={!!syncFailedMessage()}>
+              <div class="text-center text-error">❌ Sync Failed: {syncFailedMessage()}</div>
+            </Show>
+          </div>
+        </Show>
+
+        <Show when={settings().syncType === 'github_gist'}>
+          <div class="grid gap-4 mt-1 mb-2">
+            <input
+              type="text"
+              class="input input-bordered text-sm"
+              placeholder="Github Token"
+              value={githubToken()}
+              oninput={onGithubTokenInput}
             />
-          </Show>
-          <button onclick={onDriveSync} class="btn btn-block btn-lg capitalize text-xs">
-            <img
-              src={chrome.runtime.getURL('icons/gdrive.png')}
-              classList={{ 'animate-spin': syning() }}
-              class="w-8 h-8"
-              alt="upload"
+            <input
+              type="text"
+              class="input input-bordered text-sm"
+              placeholder="GitHub Gist Id"
+              value={githubGistId()}
+              oninput={onGithubGistIdInput}
             />
-            Google Drive Sync
-          </button>
+            <button class="btn btn-block btn-lg capitalize text-xs" onclick={onGithubGistSync}>
+              <img
+                src={chrome.runtime.getURL('icons/github.png')}
+                classList={{ 'animate-spin': githubSyncing() }}
+                class="w-8 h-8"
+                alt="github"
+              />
+              Github Gist Sync
+            </button>
+            <Show when={latestGistSyncTime() > 0 && !gistSyncFailedMessage()}>
+              <div class="text-center text-accent">Latest sync: {formatTime(latestGistSyncTime())}</div>
+            </Show>
+            <Show when={githubToken() && githubGistId() && !!gistSyncFailedMessage()}>
+              <div class="text-center text-error">❌ Sync Failed: {gistSyncFailedMessage()}</div>
+            </Show>
+          </div>
+        </Show>
 
-          <Show when={latestSyncTime() > 0 && !syncFailedMessage()}>
-            <div class="text-center text-accent">Latest sync: {formatTime(latestSyncTime())}</div>
-          </Show>
-          <Show when={!!syncFailedMessage()}>
-            <div class="text-center text-error">❌ Sync Failed: {syncFailedMessage()}</div>
-          </Show>
-        </div>
-
-        <div class="divider">OR</div>
-
-        <div class="grid gap-4 mt-1 mb-2">
-          <input
-            type="text"
-            class="input input-bordered text-sm"
-            placeholder="Github Token"
-            value={githubToken()}
-            oninput={onGithubTokenInput}
-          />
-          <input
-            type="text"
-            class="input input-bordered text-sm"
-            placeholder="GitHub Gist Id"
-            value={githubGistId()}
-            oninput={onGithubGistIdInput}
-          />
-          <button class="btn btn-block btn-lg capitalize text-xs" onclick={onGithubGistSync}>
-            <img
-              src={chrome.runtime.getURL('icons/github.png')}
-              classList={{ 'animate-spin': githubSyning() }}
-              class="w-8 h-8"
-              alt="github"
+        <Show when={settings().syncType === 'webdav'}>
+          <div class="grid gap-4 mt-1 mb-2">
+            <input
+              type="text"
+              class="input input-bordered text-sm"
+              placeholder="WebDAV URL (directory, not file)"
+              value={settings().webdav.url}
+              oninput={onWebDAVUrlInput}
             />
-            Github Gist Sync
-          </button>
-          <Show when={latestGistSyncTime() > 0 && !gistSyncFailedMessage()}>
-            <div class="text-center text-accent">Latest sync: {formatTime(latestGistSyncTime())}</div>
-          </Show>
-          <Show when={githubToken() && githubGistId() && !!gistSyncFailedMessage()}>
-            <div class="text-center text-error">❌ Sync Failed: {gistSyncFailedMessage()}</div>
-          </Show>
-        </div>
+            <div class="text-xs text-base-content/60">
+              <span>Example: </span>
+              <code class="bg-base-200 px-1 rounded">https://dav.jianguoyun.com/dav/</code>
+            </div>
+            <input
+              type="text"
+              class="input input-bordered text-sm"
+              placeholder="WebDAV Username"
+              value={settings().webdav.username}
+              oninput={onWebDAVUsernameInput}
+            />
+            <input
+              type="password"
+              class="input input-bordered text-sm"
+              placeholder="WebDAV Password"
+              value={settings().webdav.password}
+              oninput={onWebDAVPasswordInput}
+            />
+            <button class="btn btn-block btn-lg capitalize text-xs" onclick={onWebDAVSync}>
+              <img
+                src={chrome.runtime.getURL('icons/webdav.png')}
+                classList={{ 'animate-spin': webdavSyncing() }}
+                class="w-8 h-8"
+                alt="webdav"
+                onerror={(e) => (e.currentTarget.src = chrome.runtime.getURL('icons/upload.png'))}
+              />
+              WebDAV Sync
+            </button>
+            <Show when={latestWebDAVSyncTime() > 0 && !webdavSyncFailedMessage()}>
+              <div class="text-center text-accent">Latest sync: {formatTime(latestWebDAVSyncTime())}</div>
+            </Show>
+            <Show when={settings().webdav.url && !!webdavSyncFailedMessage()}>
+              <div class="text-center text-error">❌ Sync Failed: {webdavSyncFailedMessage()}</div>
+            </Show>
+          </div>
+        </Show>
       </section>
       <Show when={toastSuccess()}>
         <div class="toast toast-end toast-bottom">

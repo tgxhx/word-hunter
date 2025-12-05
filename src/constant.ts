@@ -55,7 +55,9 @@ export enum StorageKey {
   'local_knowns_log' = 'local_knowns_log',
   'version' = 'version',
   'github_token' = 'github_token',
-  'github_gist_id' = 'github_gist_id'
+  'github_gist_id' = 'github_gist_id',
+  'latest_webdav_sync_time' = 'latest_webdav_sync_time',
+  'webdav_sync_failed_message' = 'webdav_sync_failed_message'
 }
 
 export enum Messages {

@@ -36,7 +36,8 @@ export async function explainWord(word: string, context: string, model: string) 
             role: 'user',
             content: prompt
           }
-        ]
+        ],
+        ...(useMarkdownRender ? { response_format: { type: 'json_object' } } : {})
       })
     })
 

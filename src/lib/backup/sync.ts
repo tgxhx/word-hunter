@@ -1,10 +1,11 @@
 import { StorageKey, WordMap, ContextMap } from '../../constant'
-import { mergeKnowns, mergeContexts, cleanupContexts, getAllKnownSync, getLocalValue, getSyncValue } from '../storage'
-import { SettingType, mergeSetting, settings, getGithubToken, getGithubGistId } from '../settings'
+import { mergeKnowns, mergeContexts, cleanupContexts, getAllKnownSync, getLocalValue, getSyncValue, syncUpKnowns } from '../storage'
+import { SettingType, mergeSetting, settings, getGithubToken, getGithubGistId, restoreSettings, sanitizeSettings } from '../settings'
 import * as GDrive from './drive'
 import { getGistData, updateGist } from './github'
+import * as WebDAV from './webdav'
 
-type BackupData = {
+export type BackupData = {
   known: WordMap
   context: ContextMap
   settings: SettingType
@@ -62,6 +63,16 @@ export async function getMergedData(appData: BackupData, remoteData: BackupData)
   }
 }
 
+export async function restoreBackupData(json: BackupData) {
+  const updateTime = Date.now()
+  await chrome.storage.local.set({
+    [StorageKey.context]: json[StorageKey.context] ?? {},
+    [StorageKey.context_update_timestamp]: updateTime
+  })
+  syncUpKnowns(Object.keys(json[StorageKey.known] ?? {}), json[StorageKey.known], updateTime)
+  await restoreSettings(json[StorageKey.settings])
+}
+
 export async function _syncWithDrive(interactive: boolean = true) {
   await GDrive.auth(interactive)
   let dirId = await GDrive.findDirId()
@@ -77,11 +88,13 @@ export async function _syncWithDrive(interactive: boolean = true) {
     const appData = await getBackupData()
     const gdriveData = (await GDrive.downloadFile(fileId)) as BackupData
     const mergedData = await getMergedData(appData, gdriveData)
+    mergedData.settings = sanitizeSettings(mergedData.settings)
     const file = new File([JSON.stringify(mergedData)], GDrive.FILE_NAME, { type: 'application/json' })
     await GDrive.uploadFile(file, 'application/json', dirId, fileId)
   } else {
     // just upload
     const localData = await getBackupData()
+    localData.settings = sanitizeSettings(localData.settings)
     const file = new File([JSON.stringify(localData)], GDrive.FILE_NAME, { type: 'application/json' })
     await GDrive.uploadFile(file, 'application/json', dirId)
   }
@@ -106,6 +119,7 @@ export async function _syncWithGist(token: string, gistId: string) {
   const appData = await getBackupData()
   const gistData = await getGistData(token, gistId)
   const mergedData = await getMergedData(appData, gistData)
+  mergedData.settings = sanitizeSettings(mergedData.settings)
   await updateGist(token, gistId, mergedData)
 }
 
@@ -124,10 +138,50 @@ export async function syncWithGist(token: string, gistId: string): Promise<numbe
   }
 }
 
+export async function triggerWebDAVSyncJob() {
+  if (settings().syncType !== 'webdav') return
+  if (!(await getLocalValue(StorageKey.latest_webdav_sync_time))) return
+  chrome.alarms.clear(WEBDAV_SYNC_ALARM_NAME)
+  chrome.alarms.create(WEBDAV_SYNC_ALARM_NAME, {
+    delayInMinutes: 1
+  })
+}
+
+export async function _syncWithWebDAV() {
+  const appData = await getBackupData()
+  const webdavData = await WebDAV.downloadFile()
+  if (webdavData) {
+    const mergedData = await getMergedData(appData, webdavData)
+    mergedData.settings = sanitizeSettings(mergedData.settings)
+    await WebDAV.uploadFile(mergedData)
+    await restoreBackupData(mergedData)
+  } else {
+    appData.settings = sanitizeSettings(appData.settings)
+    await WebDAV.uploadFile(appData)
+  }
+}
+
+export async function syncWithWebDAV(): Promise<number> {
+  try {
+    await _syncWithWebDAV()
+    const latest_webdav_sync_time = Date.now()
+    await chrome.storage.local.set({
+      [StorageKey.latest_webdav_sync_time]: latest_webdav_sync_time,
+      [StorageKey.webdav_sync_failed_message]: ''
+    })
+    return latest_webdav_sync_time
+  } catch (e: any) {
+    await chrome.storage.local.set({ [StorageKey.webdav_sync_failed_message]: e.message })
+    throw e
+  }
+}
+
 const SYNC_ALARM_NAME = 'SYNC_WITH_GDRIVE'
 const GIST_SYNC_ALARM_NAME = 'SYNC_WITH_GIST'
+const WEBDAV_SYNC_ALARM_NAME = 'SYNC_WITH_WEBDAV'
 
 export async function triggerGoogleDriveSyncJob() {
+  if (settings().syncType !== 'google_drive') return
   if (!(await getLocalValue(StorageKey.latest_sync_time)) || !(await getSyncValue(StorageKey.latest_sync_time))) return
   chrome.alarms.clear(SYNC_ALARM_NAME)
   chrome.alarms.create(SYNC_ALARM_NAME, {
@@ -136,6 +190,7 @@ export async function triggerGoogleDriveSyncJob() {
 }
 
 export async function triggerGithubGistSyncJob() {
+  if (settings().syncType !== 'github_gist') return
   if (!(await getLocalValue(StorageKey.latest_gist_sync_time))) return
   chrome.alarms.clear(GIST_SYNC_ALARM_NAME)
   chrome.alarms.create(GIST_SYNC_ALARM_NAME, {
@@ -146,17 +201,26 @@ export async function triggerGithubGistSyncJob() {
 export async function triggerSyncJob() {
   triggerGoogleDriveSyncJob()
   triggerGithubGistSyncJob()
+  triggerWebDAVSyncJob()
 }
 
 chrome.alarms?.onAlarm?.addListener(async ({ name }) => {
+  const syncType = settings().syncType
   if (name === SYNC_ALARM_NAME) {
-    syncWithDrive(false)
+    if (syncType === 'google_drive') {
+      syncWithDrive(false)
+    }
   }
   if (name === GIST_SYNC_ALARM_NAME) {
     const token = await getGithubToken()
     const gistId = await getGithubGistId()
-    if (token && gistId) {
+    if (syncType === 'github_gist' && token && gistId) {
       syncWithGist(token, gistId)
+    }
+  }
+  if (name === WEBDAV_SYNC_ALARM_NAME) {
+    if (syncType === 'webdav' && settings().webdav.url) {
+      syncWithWebDAV()
     }
   }
 })
